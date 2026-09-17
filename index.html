@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Lara'nın Rotası — Kararlı ve Çakışmasız Akış</title>
+  <title>Lara'nın Rotası — Projeksiyon Kilitlemeli Kesin Çözüm</title>
   <style>
     html, body {
       padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden;
@@ -61,11 +61,12 @@
       "esri/layers/GraphicsLayer",
       "esri/Graphic",
       "esri/geometry/Polyline",
-      "esri/geometry/Point"
-    ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline, Point) {
+      "esri/geometry/Point",
+      "esri/geometry/support/webMercatorUtils"
+    ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline, Point, webMercatorUtils) {
 
       const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
-      const STEP_MS = 45; // Akıcı milisaniye aralığı
+      const STEP_MS = 45;
 
       const webmap = new WebMap({
         portalItem: { id: WEBMAP_PORTAL_ITEM_ID },
@@ -88,7 +89,7 @@
       const followCam = document.getElementById("followCam");
 
       let fullPath = null;
-      let spatialRef = null;
+      const spatialRef = { wkid: 3857 }; // Web Mercator sabitlendi
       let timer = null;
       let isPlaying = false;
 
@@ -134,7 +135,7 @@
           const q = routeLayer.createQuery();
           q.where = "1=1";
           q.returnGeometry = true;
-          q.outSpatialReference = view.spatialReference;
+          q.outSpatialReference = { wkid: 4326 }; // Veriyi ham derece (WGS84) olarak çekip kendimiz güvenle dönüştüreceğiz
 
           const result = await routeLayer.queryFeatures(q);
           if (result.features.length === 0) {
@@ -146,10 +147,17 @@
           const geom = result.features[0].geometry;
           
           const rawReversed = geom.paths[0].reverse();
-          fullPath = densifyPath(rawReversed, 8); 
-          spatialRef = view.spatialReference;
 
-          sourceText.textContent = `Aktif Rota: ${fullPath.length} mikro-adım (Kararlı Mod)`;
+          // Derece cinsindeki koordinatları Web Mercator metreye güvenle çeviriyoruz (Denize gitmeyi önler)
+          const convertedPath = rawReversed.map(coord => {
+            const pt = new Point({ x: coord[0], y: coord[1], spatialReference: { wkid: 4326 } });
+            const wm = webMercatorUtils.geographicToWebMercator(pt);
+            return [wm.x, wm.y];
+          });
+
+          fullPath = densifyPath(convertedPath, 8); 
+
+          sourceText.textContent = `Aktif Rota: ${fullPath.length} mikro-adım (Projeksiyon Kilitli)`;
 
           scrub.max = fullPath.length;
           scrub.value = 1;
@@ -219,7 +227,6 @@
           const tipPoint = new Point({ x: tip[0], y: tip[1], spatialReference: spatialRef });
           activePointGraphic.geometry = tipPoint;
 
-          // Animasyon kuyruğunu şişiren goTo yerine doğrudan güvenli center ataması
           if (followCam.checked && isPlaying && animateCamera) {
             view.center = tipPoint;
             if (view.zoom !== 12.5) {
