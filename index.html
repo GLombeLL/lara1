@@ -186,12 +186,11 @@
         animLayer.add(new Graphic({
           geometry: tipPoint,
           symbol: {
-            type: "text",
-            text: TURTLE_EMOJI,
-            font: { size: TURTLE_SIZE },
-            color: [255, 255, 255, 1],
-            haloColor: [0, 0, 0, 0.6],
-            haloSize: 1
+            type: "simple-marker",
+            style: "circle",
+            color: [255, 214, 64, 1],
+            size: 14,
+            outline: { color: [255, 255, 255, 1], width: 2 }
           }
         }));
 
