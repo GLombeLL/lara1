@@ -24,9 +24,10 @@
     .section-label { font-size:11px; color:#8a8a8a; text-transform:uppercase; letter-spacing:1px; margin:10px 0 6px 0; }
     input[type=range] { width:100%; cursor:pointer; }
     #progressText { font-size:13px; margin-top:6px; color:#b0b0b0; }
+    #sourceText { font-size:11px; margin-top:4px; color:#6a6a6a; font-style:italic; }
     label.chk { font-size:12px; color:#b0b0b0; display:flex; align-items:center; gap:6px; margin-top:10px; }
   </style>
-  <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/dark/main.css" />
+  <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css" />
   <script src="https://js.arcgis.com/4.28/"></script>
 </head>
 <body>
@@ -39,9 +40,10 @@
       <button id="resetBtn">↺ Başa Sar</button>
     </div>
 
-    <div class="section-label">İlerleme (1 / 122)</div>
+    <div class="section-label">İlerleme</div>
     <input type="range" id="scrubSlider" min="1" max="122" value="1" step="1">
     <div id="progressText">Nokta 1 / 122</div>
+    <div id="sourceText">Sıralama kaynağı belirleniyor…</div>
 
     <label class="chk"><input type="checkbox" id="followCam" checked> Kamera rotayı takip etsin</label>
   </div>
@@ -51,103 +53,139 @@
   <script>
     require([
       "esri/WebMap",
-      "esri/views/MapViewer",
+      "esri/views/MapView",
       "esri/layers/GraphicsLayer",
       "esri/Graphic",
       "esri/geometry/Polyline"
-    ], function(WebMap, SceneView, GraphicsLayer, Graphic, Polyline) {
+    ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline) {
 
       // =====================================================================
-      // AYARLAR — buradan uyarlayın
+      // AYARLAR
       // =====================================================================
-      const SCENE_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c"; // sahneniz
-      const ROUTE_LAYER_TITLE_HINT = "Lara_Polylines1";  // katman adı (küçük harf, kısmi eşleşme yeterli)
-      const STEP_MS = 120;           // otomatik oynatmada nokta başına süre (ms) — hızı buradan ayarlayın
-      const FOLLOW_TILT = 65;
-      const FOLLOW_SCALE = 6000;     // kamera takip ederken ne kadar yakın dursun
-      const TURTLE_EMOJI = "🐢";     // rotanın ucunda birlikte hareket eden işaret
-      const TURTLE_SIZE = 26;        // emoji boyutu
+      const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
+      const ROUTE_LAYER_TITLE_HINT = "lara_polylines1"; // polyline katmanı (fallback kaynağı)
+      const STEP_MS = 120;            // otomatik oynatmada nokta başına süre (ms)
+      const FOLLOW_ZOOM = 15;         // kamera takip ederken yaklaşma seviyesi
+      const TURTLE_EMOJI = "🐢";
+      const TURTLE_SIZE = 22;
       // =====================================================================
 
-      const scene = new WebMap({ portalItem: { id: SCENE_PORTAL_ITEM_ID } });
-      const view = new MapViewer({ container: "viewDiv", map: scene });
+      const webmap = new WebMap({ portalItem: { id: WEBMAP_PORTAL_ITEM_ID } });
+      const view = new MapView({ container: "viewDiv", map: webmap });
 
-      const animLayer = new GraphicsLayer({ elevationInfo: { mode: "relative-to-ground", offset: 5 } });
-      scene.add(animLayer);
+      const animLayer = new GraphicsLayer();
+      webmap.add(animLayer);
 
       const playBtn = document.getElementById("playBtn");
       const resetBtn = document.getElementById("resetBtn");
       const scrub = document.getElementById("scrubSlider");
       const progressText = document.getElementById("progressText");
+      const sourceText = document.getElementById("sourceText");
       const followCam = document.getElementById("followCam");
 
-      let fullPath = null;
+      let fullPath = null;   // [[x,y], [x,y], ...] sıralı
       let spatialRef = null;
       let timer = null;
       let isPlaying = false;
 
       view.when(() => {
-        scene.when(() => {
+        webmap.when(async () => {
+          await webmap.loadAll();
 
-          // Rota katmanını bul: önce isimde "lara" geçen katmanı arar,
-          // bulamazsa tek polyline katmanını kullanır.
-          let routeLayer = scene.allLayers.find(l =>
-            l.type === "feature" && l.title && l.title.toLowerCase().includes(ROUTE_LAYER_TITLE_HINT)
-          );
-          if (!routeLayer) {
-            routeLayer = scene.allLayers.find(l => l.type === "feature" && l.geometryType === "polyline");
+          const orderedPoints = await tryLoadFromGunField();
+          if (orderedPoints) {
+            fullPath = orderedPoints.path;
+            spatialRef = orderedPoints.spatialReference;
+            sourceText.textContent = `Sıralama kaynağı: "${orderedPoints.fieldName}" alanı (${fullPath.length} nokta)`;
+          } else {
+            const fromLine = await loadFromPolyline();
+            if (!fromLine) {
+              console.error("❌ Ne 'Gün' alanlı nokta katmanı ne de polyline bulundu.");
+              sourceText.textContent = "⚠️ Rota verisi bulunamadı — konsolu kontrol edin.";
+              return;
+            }
+            fullPath = fromLine.path;
+            spatialRef = fromLine.spatialReference;
+            sourceText.textContent = `Sıralama kaynağı: polyline vertex sırası (${fullPath.length} nokta)`;
           }
 
-          if (!routeLayer) {
-            console.error("❌ Rota (polyline) katmanı bulunamadı. ROUTE_LAYER_TITLE_HINT değerini kontrol edin.");
-            return;
-          }
+          scrub.max = fullPath.length;
+          scrub.value = 1;
+          progressText.textContent = `Nokta 1 / ${fullPath.length}`;
+          drawUpTo(1);
 
-          routeLayer.load().then(() => {
-            const q = routeLayer.createQuery();
-            q.where = "1=1";
-            q.returnGeometry = true;
-            q.outSpatialReference = view.spatialReference;
-
-            routeLayer.queryFeatures(q).then((result) => {
-              if (result.features.length === 0) {
-                console.error("❌ Rota katmanında feature bulunamadı.");
-                return;
-              }
-
-              // İlk (ve muhtemelen tek) polyline feature'ın path'ini alıyoruz
-              const geom = result.features[0].geometry;
-              fullPath = geom.paths[0]; // [[x,y,(z)], [x,y,(z)], ... 122 nokta]
-              spatialRef = geom.spatialReference;
-
-              scrub.max = fullPath.length;
-              scrub.value = 1;
-              progressText.textContent = `Nokta 1 / ${fullPath.length}`;
-
-              // Orijinal katmanı gizleyip yerine kendi animasyonumuzu çiziyoruz
-              routeLayer.visible = false;
-
-              drawUpTo(1);
-
-              scrub.addEventListener("input", () => {
-                stopPlaying();
-                drawUpTo(parseInt(scrub.value));
-              });
-
-              playBtn.addEventListener("click", () => {
-                if (isPlaying) { stopPlaying(); return; }
-                startPlaying();
-              });
-
-              resetBtn.addEventListener("click", () => {
-                stopPlaying();
-                scrub.value = 1;
-                drawUpTo(1);
-              });
-            });
+          scrub.addEventListener("input", () => {
+            stopPlaying();
+            drawUpTo(parseInt(scrub.value));
+          });
+          playBtn.addEventListener("click", () => {
+            if (isPlaying) { stopPlaying(); return; }
+            startPlaying();
+          });
+          resetBtn.addEventListener("click", () => {
+            stopPlaying();
+            scrub.value = 1;
+            drawUpTo(1);
           });
         });
       });
+
+      // Öncelikli yol: aynı haritada "Gün"/"Gun" alanlı bir NOKTA katmanı ara, varsa ondan sıralı çek
+      async function tryLoadFromGunField() {
+        const pointLayers = webmap.allLayers.filter(l => l.type === "feature" && l.geometryType === "point").toArray();
+
+        for (const pl of pointLayers) {
+          try {
+            await pl.load();
+            const gunField = pl.fields && pl.fields.find(f => {
+              const n = f.name.toLowerCase();
+              return n === "gün" || n === "gun" || n.includes("gun");
+            });
+            if (!gunField) continue;
+
+            const q = pl.createQuery();
+            q.where = "1=1";
+            q.outFields = ["*"];
+            q.returnGeometry = true;
+            q.outSpatialReference = view.spatialReference;
+            q.orderByFields = [gunField.name + " ASC"];
+
+            const res = await pl.queryFeatures(q);
+            if (res.features.length === 0) continue;
+
+            const path = res.features.map(f => [f.geometry.x, f.geometry.y]);
+            console.log(`✅ Sıralama '${gunField.name}' alanından alındı (${path.length} nokta) — katman: ${pl.title}`);
+            return { path, spatialReference: res.spatialReference || view.spatialReference, fieldName: gunField.name };
+          } catch (e) {
+            console.warn("Nokta katmanı kontrol edilirken sorun:", pl.title, e);
+          }
+        }
+        return null;
+      }
+
+      // Yedek yol: polyline'ın kendi vertex sırasını kullan
+      async function loadFromPolyline() {
+        let routeLayer = webmap.allLayers.find(l =>
+          l.type === "feature" && l.title && l.title.toLowerCase().includes(ROUTE_LAYER_TITLE_HINT)
+        );
+        if (!routeLayer) {
+          routeLayer = webmap.allLayers.find(l => l.type === "feature" && l.geometryType === "polyline");
+        }
+        if (!routeLayer) return null;
+
+        await routeLayer.load();
+        const q = routeLayer.createQuery();
+        q.where = "1=1";
+        q.returnGeometry = true;
+        q.outSpatialReference = view.spatialReference;
+
+        const result = await routeLayer.queryFeatures(q);
+        if (result.features.length === 0) return null;
+
+        routeLayer.visible = false; // kendi animasyonumuzu göstereceğiz
+        const geom = result.features[0].geometry;
+        return { path: geom.paths[0], spatialReference: geom.spatialReference };
+      }
 
       function drawUpTo(index) {
         animLayer.removeAll();
@@ -161,31 +199,27 @@
           const line = new Polyline({ paths: [partial], spatialReference: spatialRef });
           animLayer.add(new Graphic({
             geometry: line,
-            symbol: {
-              type: "line-3d",
-              symbolLayers: [{ type: "line", material: { color: [76, 209, 165, 0.95] }, size: 3 }]
-            }
+            symbol: { type: "simple-line", color: [76, 209, 165, 0.95], width: 3 }
           }));
         }
 
-        // Rotanın ucunda birlikte ilerleyen kaplumbağa işareti
         const tip = partial[partial.length - 1];
-        const tipPoint = { type: "point", x: tip[0], y: tip[1], z: tip[2] || 0, spatialReference: spatialRef };
+        const tipPoint = { type: "point", x: tip[0], y: tip[1], spatialReference: spatialRef };
+
         animLayer.add(new Graphic({
           geometry: tipPoint,
           symbol: {
-            type: "point-3d",
-            symbolLayers: [{
-              type: "text",
-              text: TURTLE_EMOJI,
-              size: TURTLE_SIZE,
-              material: { color: [255, 255, 255, 1] }
-            }]
+            type: "text",
+            text: TURTLE_EMOJI,
+            font: { size: TURTLE_SIZE },
+            color: [255, 255, 255, 1],
+            haloColor: [0, 0, 0, 0.6],
+            haloSize: 1
           }
         }));
 
         if (followCam.checked) {
-          view.goTo({ target: tipPoint, scale: FOLLOW_SCALE, tilt: FOLLOW_TILT }, { duration: 400, easing: "linear" });
+          view.goTo({ center: [tip[0], tip[1]], zoom: Math.max(view.zoom, FOLLOW_ZOOM) }, { duration: 400, easing: "linear" });
         }
       }
 
