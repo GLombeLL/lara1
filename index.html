@@ -3,31 +3,53 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Lara'nın Rotası — Kümülatif Animasyon</title>
+  <title>Lara'nın Rotası — Esri Harita Entegrasyonu</title>
   <style>
-    body, html { margin:0; padding:0; width:100%; height:100%; font-family:'Segoe UI',Tahoma,sans-serif; background:#1e1e1e; color:#e0e0e0; overflow:hidden; }
-    #viewDiv { width:100%; height:100%; position:absolute; }
+    html, body {
+      padding: 0;
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+    }
+    #viewDiv {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
     .control-panel {
-      position:absolute; top:20px; left:20px; z-index:99;
-      background:rgba(18,18,18,0.92); backdrop-filter:blur(12px);
-      border:1px solid rgba(255,255,255,0.15); padding:20px; border-radius:12px; width:340px;
-      box-shadow:0 10px 30px rgba(0,0,0,0.7);
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      z-index: 99;
+      background: rgba(18, 18, 18, 0.92);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      padding: 20px;
+      border-radius: 12px;
+      width: 340px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+      color: #e0e0e0;
     }
-    .control-panel h2 { font-size:15px; margin:0 0 15px 0; color:#4CAF50; text-transform:uppercase; letter-spacing:1px; }
-    .row { display:flex; gap:8px; margin-bottom:14px; }
+    .control-panel h2 { font-size: 15px; margin: 0 0 15px 0; color: #4CAF50; text-transform: uppercase; letter-spacing: 1px; }
+    .row { display: flex; gap: 8px; margin-bottom: 14px; }
     button {
-      flex:1; padding:9px 0; border-radius:8px; border:1px solid rgba(255,255,255,0.2);
-      background:#1e1e1e; color:#e0e0e0; font-size:13px; font-weight:700; cursor:pointer;
+      flex: 1; padding: 9px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,0.2);
+      background: #1e1e1e; color: #e0e0e0; font-size: 13px; font-weight: 700; cursor: pointer;
     }
-    button.primary { background:#1C7293; border-color:#1C7293; }
-    button:hover { opacity:0.85; }
-    .section-label { font-size:11px; color:#8a8a8a; text-transform:uppercase; letter-spacing:1px; margin:10px 0 6px 0; }
-    input[type=range] { width:100%; cursor:pointer; }
-    #progressText { font-size:13px; margin-top:6px; color:#b0b0b0; }
-    #sourceText { font-size:11px; margin-top:4px; color:#6a6a6a; font-style:italic; }
-    label.chk { font-size:12px; color:#b0b0b0; display:flex; align-items:center; gap:6px; margin-top:10px; }
+    button.primary { background: #1C7293; border-color: #1C7293; }
+    button:hover { opacity: 0.85; }
+    .section-label { font-size: 11px; color: #8a8a8a; text-transform: uppercase; letter-spacing: 1px; margin: 10px 0 6px 0; }
+    input[type=range] { width: 100%; cursor: pointer; }
+    #progressText { font-size: 13px; margin-top: 6px; color: #b0b0b0; }
+    #sourceText { font-size: 11px; margin-top: 4px; color: #6a6a6a; font-style: italic; }
+    label.chk { font-size: 12px; color: #b0b0b0; display: flex; align-items: center; gap: 6px; margin-top: 10px; }
   </style>
-  <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/dark-red/main.css" />
+
+  <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css" />
   <script src="https://js.arcgis.com/4.28/"></script>
 </head>
 <body>
@@ -43,7 +65,7 @@
     <div class="section-label">İlerleme</div>
     <input type="range" id="scrubSlider" min="1" max="122" value="1" step="1">
     <div id="progressText">Nokta 1 / 122</div>
-    <div id="sourceText">Bağlantı kuruluyor…</div>
+    <div id="sourceText">Harita yükleniyor…</div>
 
     <label class="chk"><input type="checkbox" id="followCam" checked> Kamera rotayı takip etsin</label>
   </div>
@@ -52,38 +74,33 @@
 
   <script>
     require([
-      "esri/Map",
+      "esri/WebMap",
       "esri/views/MapView",
-      "esri/layers/FeatureLayer",
       "esri/layers/GraphicsLayer",
       "esri/Graphic",
       "esri/geometry/Polyline"
-    ], function(Map, MapView, FeatureLayer, GraphicsLayer, Graphic, Polyline) {
+    ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline) {
 
-      // =====================================================================
-      // AYARLAR (Doğrudan Feature Layer Servis URL'nizi buraya yazın)
-      // =====================================================================
-      const FEATURE_LAYER_URL = "https://services.arcgis.com/.../arcgis/rest/services/.../FeatureServer/0"; // Veya katman servis linkiniz
-      const STEP_MS = 120;             
-      const FOLLOW_ZOOM = 13;          
+      const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
+      const STEP_MS = 120;
+      const FOLLOW_ZOOM = 15;
       const TURTLE_EMOJI = "🐢";
       const TURTLE_SIZE = 22;
-      // =====================================================================
 
-      // Eğer servis URL'si yerine doğrudan WebMap kullanmak istiyorsak güvenli bir basemap ile başlatıyoruz:
-      const map = new Map({
-        basemap: "dark-gray-vector"
+      // ArcGIS Online WebMap nesnesini doğrudan çağırıyoruz
+      const webmap = new WebMap({
+        portalItem: {
+          id: WEBMAP_PORTAL_ITEM_ID
+        }
       });
 
       const view = new MapView({
         container: "viewDiv",
-        map: map,
-        center: [30.0, 36.5], // Akdeniz / Antalya civarı
-        zoom: 8
+        map: webmap
       });
 
       const animLayer = new GraphicsLayer();
-      map.add(animLayer);
+      webmap.add(animLayer);
 
       const playBtn = document.getElementById("playBtn");
       const resetBtn = document.getElementById("resetBtn");
@@ -92,25 +109,132 @@
       const sourceText = document.getElementById("sourceText");
       const followCam = document.getElementById("followCam");
 
-      let fullPath = null;   
+      let fullPath = null;
       let spatialRef = null;
       let timer = null;
       let isPlaying = false;
 
-      // Harita açıldığında veriyi doğrudan Rest Servisinden çekelim
       view.when(async () => {
         try {
-          // Senin polyline katmanının Rest URL'sini buraya ekleyebilirsin veya webmap item id kullanabilirsin
-          // Alternatif olarak AGOL Webmap'ten yüklemek için:
-          sourceText.textContent = "Rotaya bağlanıldı.";
+          await webmap.loadAll();
           
-          // Test amaçlı örnek polyline simülasyon verisi (Eğer servis linki bekleniyorsa)
-          // Verini doğrudan buraya bağlayacağız:
+          let routeLayer = null;
+          for (let layer of webmap.allLayers) {
+            if (layer.type === "feature") {
+              await layer.load();
+              if (layer.geometryType === "polyline") {
+                routeLayer = layer;
+                break;
+              }
+            }
+          }
+
+          if (!routeLayer) {
+            sourceText.textContent = "⚠️ Haritada polyline katmanı bulunamadı.";
+            return;
+          }
+
+          const q = routeLayer.createQuery();
+          q.where = "1=1";
+          q.returnGeometry = true;
+          q.outSpatialReference = view.spatialReference;
+
+          const result = await routeLayer.queryFeatures(q);
+          if (result.features.length === 0) {
+            sourceText.textContent = "⚠️ Katman verisi boş.";
+            return;
+          }
+
+          routeLayer.visible = false; // Orijinal katmanı gizleyip animasyon katmanını öne alıyoruz
+          const geom = result.features[0].geometry;
+          fullPath = geom.paths[0];
+          spatialRef = geom.spatialReference || view.spatialReference;
+
+          sourceText.textContent = `Aktif Rota: ${fullPath.length} nokta yüklendi.`;
+
+          scrub.max = fullPath.length;
+          scrub.value = 1;
+          drawUpTo(1);
+
+          scrub.addEventListener("input", () => {
+            stopPlaying();
+            drawUpTo(parseInt(scrub.value));
+          });
+
+          playBtn.addEventListener("click", () => {
+            if (isPlaying) { stopPlaying(); return; }
+            startPlaying();
+          });
+
+          resetBtn.addEventListener("click", () => {
+            stopPlaying();
+            scrub.value = 1;
+            drawUpTo(1);
+          });
+
         } catch (err) {
-          sourceText.textContent = "⚠️ Veri yüklenemedi.";
           console.error(err);
+          sourceText.textContent = "⚠️ Harita yüklenirken hata oluştu.";
         }
       });
+
+      function drawUpTo(index) {
+        animLayer.removeAll();
+        if (!fullPath || index < 1) return;
+
+        const partial = fullPath.slice(0, index);
+        progressText.textContent = `Nokta ${index} / ${fullPath.length}`;
+        scrub.value = index;
+
+        if (partial.length >= 2) {
+          const line = new Polyline({ paths: [partial], spatialReference: spatialRef });
+          animLayer.add(new Graphic({
+            geometry: line,
+            symbol: { type: "simple-line", color: [76, 209, 165, 0.95], width: 3 }
+          }));
+        }
+
+        const tip = partial[partial.length - 1];
+        if (tip) {
+          const tipPoint = { type: "point", x: tip[0], y: tip[1], spatialReference: spatialRef };
+          animLayer.add(new Graphic({
+            geometry: tipPoint,
+            symbol: {
+              type: "text",
+              text: TURTLE_EMOJI,
+              font: { size: TURTLE_SIZE },
+              color: [255, 255, 255, 1],
+              haloColor: [0, 0, 0, 0.6],
+              haloSize: 1
+            }
+          }));
+
+          if (followCam.checked) {
+            view.goTo({ center: [tip[0], tip[1]], zoom: Math.max(view.zoom, FOLLOW_ZOOM) }, { duration: 300, easing: "linear" });
+          }
+        }
+      }
+
+      function startPlaying() {
+        isPlaying = true;
+        playBtn.textContent = "⏸ Durdur";
+        let idx = parseInt(scrub.value);
+        timer = setInterval(() => {
+          idx++;
+          if (idx > fullPath.length) { 
+            stopPlaying(); 
+            return; 
+          }
+          drawUpTo(idx);
+        }, STEP_MS);
+      }
+
+      function stopPlaying() {
+        isPlaying = false;
+        playBtn.textContent = "▶ Oynat";
+        if (timer) clearInterval(timer);
+        timer = null;
+      }
 
     });
   </script>
