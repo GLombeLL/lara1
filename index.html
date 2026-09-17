@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Lara'nın Rotası — Aydınlık Harita</title>
+  <title>Lara'nın Rotası — 3D Scene Animasyonu</title>
   <style>
     html, body {
       padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden;
@@ -47,7 +47,7 @@
     <div class="section-label">İlerleme</div>
     <input type="range" id="scrubSlider" min="1" max="122" value="1" step="1">
     <div id="progressText">Nokta 1 / 122</div>
-    <div id="sourceText">Harita yükleniyor…</div>
+    <div id="sourceText">Sahne yükleniyor…</div>
 
     <label class="chk"><input type="checkbox" id="followCam" checked> Kamera rotayı takip etsin</label>
   </div>
@@ -57,23 +57,22 @@
   <script>
     require([
       "esri/WebMap",
-      "esri/views/MapView",
+      "esri/views/SceneView",
       "esri/layers/GraphicsLayer",
       "esri/Graphic",
       "esri/geometry/Polyline"
-    ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline) {
+    ], function(WebMap, SceneView, GraphicsLayer, Graphic, Polyline) {
 
       const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
       const STEP_MS = 120;
-      const FOLLOW_ZOOM = 15;
+      const FOLLOW_ZOOM = 14000; // SceneView için metre cinsinden yükseklik
 
-      // WebMap'e zorunlu baz harita atayarak siyah ekranı engelliyoruz
       const webmap = new WebMap({
-        portalItem: { id: WEBMAP_PORTAL_ITEM_ID },
-        basemap: "streets-navigation-vector" 
+        portalItem: { id: WEBMAP_PORTAL_ITEM_ID }
       });
 
-      const view = new MapView({
+      // 2D MapView yerine 3D SceneView kullanarak siyah ekran krizini kökten çözüyoruz
+      const view = new SceneView({
         container: "viewDiv",
         map: webmap
       });
@@ -153,7 +152,7 @@
 
         } catch (err) {
           console.error(err);
-          sourceText.textContent = "⚠️ Harita yüklenirken hata oluştu.";
+          sourceText.textContent = "⚠️ Sahne yüklenirken hata oluştu.";
         }
       });
 
@@ -189,7 +188,11 @@
           }));
 
           if (followCam.checked) {
-            view.goTo({ center: [tip[0], tip[1]], zoom: Math.max(view.zoom, FOLLOW_ZOOM) }, { duration: 300, easing: "linear" });
+            view.goTo({
+              target: [tip[0], tip[1]],
+              scale: FOLLOW_ZOOM,
+              tilt: 45
+            }, { duration: 300, easing: "linear" });
           }
         }
       }
