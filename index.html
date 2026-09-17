@@ -4,12 +4,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
   <title>Lara'nın Rotası — Kümülatif Animasyon</title>
-  <style><!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Lara'nın Rotası — Kümülatif Animasyon</title>
   <style>
     body, html { margin:0; padding:0; width:100%; height:100%; font-family:'Segoe UI',Tahoma,sans-serif; background:#1a1a1a; color:#e0e0e0; overflow:hidden; }
     #viewDiv { width:100%; height:100%; position:absolute; background-color: #1a1a1a; }
@@ -60,17 +54,19 @@
     require([
       "esri/WebMap",
       "esri/views/MapView",
+      "esri/Basemap",
+      "esri/layers/TileLayer",
       "esri/layers/GraphicsLayer",
       "esri/Graphic",
       "esri/geometry/Polyline"
-    ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline) {
+    ], function(WebMap, MapView, Basemap, TileLayer, GraphicsLayer, Graphic, Polyline) {
 
       // =====================================================================
       // AYARLAR
       // =====================================================================
       const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
-      const STEP_MS = 120;             
-      const FOLLOW_ZOOM = 15;          
+      const STEP_MS = 120;
+      const FOLLOW_ZOOM = 15;
       const TURTLE_EMOJI = "🐢";
       const TURTLE_SIZE = 22;
       // =====================================================================
@@ -88,13 +84,24 @@
       const sourceText = document.getElementById("sourceText");
       const followCam = document.getElementById("followCam");
 
-      let fullPath = null;   
+      let fullPath = null;
       let spatialRef = null;
       let timer = null;
       let isPlaying = false;
 
       view.when(async () => {
         await webmap.load();
+
+        // WebMap'in kendi basemap'i (API-key gerektiren yeni Esri stil servisine bağlı olabilir)
+        // yerine, anahtar gerektirmeyen, herkese açık bir basemap'i zorla devreye sokuyoruz.
+        // Bu, "arka plan siyah" sorununun en yaygın nedenidir.
+        webmap.basemap = new Basemap({
+          baseLayers: [
+            new TileLayer({
+              url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
+            })
+          ]
+        });
 
         const fromLine = await loadFromPolyline();
         if (!fromLine || !fromLine.path || fromLine.path.length === 0) {
@@ -128,7 +135,7 @@
 
       async function loadFromPolyline() {
         let routeLayer = null;
-        
+
         await webmap.loadAll();
         for (let layer of webmap.allLayers) {
           if (layer.type === "feature") {
@@ -150,9 +157,9 @@
         const result = await routeLayer.queryFeatures(q);
         if (result.features.length === 0) return null;
 
-        routeLayer.visible = false; 
+        routeLayer.visible = false;
         const geom = result.features[0].geometry;
-        
+
         if (!geom.paths || geom.paths.length === 0) return null;
         return { path: geom.paths[0], spatialReference: geom.spatialReference || view.spatialReference };
       }
@@ -199,219 +206,9 @@
         let idx = parseInt(scrub.value);
         timer = setInterval(() => {
           idx++;
-          if (idx > fullPath.length) { 
-            stopPlaying(); 
-            return; 
-          }
-          drawUpTo(idx);
-        }, STEP_MS);
-      }
-
-      function stopPlaying() {
-        isPlaying = false;
-        playBtn.textContent = "▶ Oynat";
-        if (timer) clearInterval(timer);
-        timer = null;
-      }
-
-    });
-  </script>
-</body>
-</html>
-    body, html { margin:0; padding:0; width:100%; height:100%; font-family:'Segoe UI',Tahoma,sans-serif; background:#121212; color:#e0e0e0; overflow:hidden; }
-    #viewDiv { width:100%; height:100%; position:absolute; }
-    .control-panel {
-      position:absolute; top:20px; left:20px; z-index:99;
-      background:rgba(18,18,18,0.92); backdrop-filter:blur(12px);
-      border:1px solid rgba(255,255,255,0.15); padding:20px; border-radius:12px; width:340px;
-      box-shadow:0 10px 30px rgba(0,0,0,0.7);
-    }
-    .control-panel h2 { font-size:15px; margin:0 0 15px 0; color:#4CAF50; text-transform:uppercase; letter-spacing:1px; }
-    .row { display:flex; gap:8px; margin-bottom:14px; }
-    button {
-      flex:1; padding:9px 0; border-radius:8px; border:1px solid rgba(255,255,255,0.2);
-      background:#1e1e1e; color:#e0e0e0; font-size:13px; font-weight:700; cursor:pointer;
-    }
-    button.primary { background:#1C7293; border-color:#1C7293; }
-    button:hover { opacity:0.85; }
-    .section-label { font-size:11px; color:#8a8a8a; text-transform:uppercase; letter-spacing:1px; margin:10px 0 6px 0; }
-    input[type=range] { width:100%; cursor:pointer; }
-    #progressText { font-size:13px; margin-top:6px; color:#b0b0b0; }
-    #sourceText { font-size:11px; margin-top:4px; color:#6a6a6a; font-style:italic; }
-    label.chk { font-size:12px; color:#b0b0b0; display:flex; align-items:center; gap:6px; margin-top:10px; }
-  </style>
-  <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/light/main.css" />
-  <script src="https://js.arcgis.com/4.28/"></script>
-</head>
-<body>
-
-  <div class="control-panel">
-    <h2>Lara'nın Rotası</h2>
-
-    <div class="row">
-      <button id="playBtn" class="primary">▶ Oynat</button>
-      <button id="resetBtn">↺ Başa Sar</button>
-    </div>
-
-    <div class="section-label">İlerleme</div>
-    <input type="range" id="scrubSlider" min="1" max="122" value="1" step="1">
-    <div id="progressText">Nokta 1 / 122</div>
-    <div id="sourceText">Sıralama kaynağı belirleniyor…</div>
-
-    <label class="chk"><input type="checkbox" id="followCam" checked> Kamera rotayı takip etsin</label>
-  </div>
-
-  <div id="viewDiv"></div>
-
-  <script>
-    require([
-      "esri/WebMap",
-      "esri/views/MapView",
-      "esri/layers/GraphicsLayer",
-      "esri/Graphic",
-      "esri/geometry/Polyline"
-    ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline) {
-
-      // =====================================================================
-      // AYARLAR
-      // =====================================================================
-      const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
-      const ROUTE_LAYER_TITLE_HINT = "Lara_Polylines1"; 
-      const STEP_MS = 120;             
-      const FOLLOW_ZOOM = 15;          
-      const TURTLE_EMOJI = "🐢";
-      const TURTLE_SIZE = 22;
-      // =====================================================================
-
-      const webmap = new WebMap({ portalItem: { id: WEBMAP_PORTAL_ITEM_ID } });
-      const view = new MapView({ container: "viewDiv", map: webmap });
-
-      const animLayer = new GraphicsLayer();
-      webmap.add(animLayer);
-
-      const playBtn = document.getElementById("playBtn");
-      const resetBtn = document.getElementById("resetBtn");
-      const scrub = document.getElementById("scrubSlider");
-      const progressText = document.getElementById("progressText");
-      const sourceText = document.getElementById("sourceText");
-      const followCam = document.getElementById("followCam");
-
-      let fullPath = null;   
-      let spatialRef = null;
-      let timer = null;
-      let isPlaying = false;
-
-      view.when(async () => {
-        await webmap.load();
-
-        // Doğrudan polyline katmanını bul ve vertex'lerini kümülatif çizim için diziye dök
-        const fromLine = await loadFromPolyline();
-        if (!fromLine || !fromLine.path || fromLine.path.length === 0) {
-          sourceText.textContent = "⚠️ Rota katmanı bulunamadı veya boş.";
-          return;
-        }
-
-        fullPath = fromLine.path;
-        spatialRef = fromLine.spatialReference;
-        sourceText.textContent = `Sıralama kaynağı: Polyline Vertex (${fullPath.length} nokta)`;
-
-        scrub.max = fullPath.length;
-        scrub.value = 1;
-        progressText.textContent = `Nokta 1 / ${fullPath.length}`;
-        drawUpTo(1);
-
-        scrub.addEventListener("input", () => {
-          stopPlaying();
-          drawUpTo(parseInt(scrub.value));
-        });
-        playBtn.addEventListener("click", () => {
-          if (isPlaying) { stopPlaying(); return; }
-          startPlaying();
-        });
-        resetBtn.addEventListener("click", () => {
-          stopPlaying();
-          scrub.value = 1;
-          drawUpTo(1);
-        });
-      });
-
-      async function loadFromPolyline() {
-        let routeLayer = null;
-        
-        // Haritadaki katmanların yüklenmesini bekleyip katmanı yakala
-        await webmap.loadAll();
-        for (let layer of webmap.allLayers) {
-          if (layer.type === "feature") {
-            await layer.load();
-            if (layer.geometryType === "polyline") {
-              routeLayer = layer;
-              break;
-            }
-          }
-        }
-
-        if (!routeLayer) return null;
-
-        const q = routeLayer.createQuery();
-        q.where = "1=1";
-        q.returnGeometry = true;
-        q.outSpatialReference = view.spatialReference;
-
-        const result = await routeLayer.queryFeatures(q);
-        if (result.features.length === 0) return null;
-
-        routeLayer.visible = false; // Orijinal katmanı gizleyip kendi animasyon katmanımızı öne alıyoruz
-        const geom = result.features[0].geometry;
-        
-        if (!geom.paths || geom.paths.length === 0) return null;
-        return { path: geom.paths[0], spatialReference: geom.spatialReference || view.spatialReference };
-      }
-
-      function drawUpTo(index) {
-        animLayer.removeAll();
-        if (!fullPath || index < 1) return;
-
-        const partial = fullPath.slice(0, index);
-        progressText.textContent = `Nokta ${index} / ${fullPath.length}`;
-        scrub.value = index;
-
-        if (partial.length >= 2) {
-          const line = new Polyline({ paths: [partial], spatialReference: spatialRef });
-          animLayer.add(new Graphic({
-            geometry: line,
-            symbol: { type: "simple-line", color: [76, 209, 165, 0.95], width: 3 }
-          }));
-        }
-
-        const tip = partial[partial.length - 1];
-        const tipPoint = { type: "point", x: tip[0], y: tip[1], spatialReference: spatialRef };
-
-        animLayer.add(new Graphic({
-          geometry: tipPoint,
-          symbol: {
-            type: "text",
-            text: TURTLE_EMOJI,
-            font: { size: TURTLE_SIZE },
-            color: [255, 255, 255, 1],
-            haloColor: [0, 0, 0, 0.6],
-            haloSize: 1
-          }
-        }));
-
-        if (followCam.checked && tip) {
-          view.goTo({ center: [tip[0], tip[1]], zoom: Math.max(view.zoom, FOLLOW_ZOOM) }, { duration: 300, easing: "linear" });
-        }
-      }
-
-      function startPlaying() {
-        isPlaying = true;
-        playBtn.textContent = "⏸ Durdur";
-        let idx = parseInt(scrub.value);
-        timer = setInterval(() => {
-          idx++;
-          if (idx > fullPath.length) { 
-            stopPlaying(); 
-            return; 
+          if (idx > fullPath.length) {
+            stopPlaying();
+            return;
           }
           drawUpTo(idx);
         }, STEP_MS);
