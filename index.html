@@ -73,15 +73,9 @@
       // =====================================================================
 
       // ---- Kendi kontrolümüzdeki, WebMap'ten TAMAMEN bağımsız güvenli harita ----
-      // WebMap'i sadece rota katmanını "almak" için kullanacağız, render zincirine hiç sokmuyoruz.
-      // Böylece WebMap'in kendi (muhtemelen API-key gerektiren) basemap'i asla geri gelemez.
-      const safeMap = new Map({
-        basemap: new Basemap({
-          baseLayers: [
-            new TileLayer({ url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer" })
-          ]
-        })
-      });
+      // OpenStreetMap kullanıyoruz — Esri'nin sunucularıyla hiçbir ilgisi yok,
+      // eğer 'server.arcgisonline.com' ağınızda engelliyse bu sorunu tamamen by-pass eder.
+      const safeMap = new Map({ basemap: "osm" });
 
       const animLayer = new GraphicsLayer();
       safeMap.add(animLayer);
@@ -116,7 +110,7 @@
         progressText.textContent = `Nokta 1 / ${fullPath.length}`;
 
         // İlk nokta merkezli, makul bir başlangıç görünümü (basemap zaten hazır)
-        view.goTo({ center: [fullPath[0][0], fullPath[0][1]], zoom: FOLLOW_ZOOM }, { duration: 0 });
+        view.goTo({ center: [fullPath[0][0], fullPath[0][1]], zoom: FOLLOW_ZOOM }, { duration: 0 }).catch(() => {});
 
         drawUpTo(1);
 
@@ -195,7 +189,7 @@
         }));
 
         if (followCam.checked && tip) {
-          view.goTo({ center: [tip[0], tip[1]], zoom: Math.max(view.zoom, FOLLOW_ZOOM) }, { duration: 300, easing: "linear" });
+          view.goTo({ center: [tip[0], tip[1]], zoom: Math.max(view.zoom, FOLLOW_ZOOM) }, { duration: 300, easing: "linear" }).catch(() => {});
         }
       }
 
