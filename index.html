@@ -50,12 +50,12 @@
 
   <script>
     require([
-      "esri/WebScene",
+      "esri/WebMap",
       "esri/views/SceneView",
       "esri/layers/GraphicsLayer",
       "esri/Graphic",
       "esri/geometry/Polyline"
-    ], function(WebScene, SceneView, GraphicsLayer, Graphic, Polyline) {
+    ], function(WebMap, SceneView, GraphicsLayer, Graphic, Polyline) {
 
       // =====================================================================
       // AYARLAR — buradan uyarlayın
@@ -69,7 +69,7 @@
       const TURTLE_SIZE = 26;        // emoji boyutu
       // =====================================================================
 
-      const scene = new WebScene({ portalItem: { id: SCENE_PORTAL_ITEM_ID } });
+      const scene = new WebMap({ portalItem: { id: SCENE_PORTAL_ITEM_ID } });
       const view = new SceneView({ container: "viewDiv", map: scene });
 
       const animLayer = new GraphicsLayer({ elevationInfo: { mode: "relative-to-ground", offset: 5 } });
