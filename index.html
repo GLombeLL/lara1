@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Lara'nın Hikayesi — Caretta Caretta Takip</title>
+  <title>Lara'nın Hikayesi — Sinematik Caretta Takip</title>
   <style>
     html, body {
       padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden;
@@ -31,7 +31,7 @@
     #sourceText { font-size: 11px; margin-top: 6px; color: #6a6a6a; font-style: italic; }
     label.chk { font-size: 12px; color: #b0b0b0; display: flex; align-items: center; gap: 6px; margin-top: 10px; }
 
-    /* EKRANIN ORTASINDAKİ VURUCU FİNAL MODALI */
+    /* Ekranın Ortasındaki Vurucu Final Modalı */
     #endModalOverlay {
       position: fixed; top: 0; left: 0; width: 100%; height: 100%;
       background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(8px);
@@ -80,10 +80,9 @@
     <label class="chk"><input type="checkbox" id="followCam" checked> Kamera rotayı takip etsin</label>
   </div>
 
-  <!-- Ekranın Ortasındaki Vurucu Final Modalı (Gerçek Caretta Görseli ile) -->
+  <!-- Vurucu Final Modalı (Caretta Caretta Görseli) -->
   <div id="endModalOverlay">
     <div id="endCard">
-      <!-- Gerçek Caretta Caretta Görseli -->
       <img src="https://images.unsplash.com/photo-1544551763-46a013bb70d5?q=80&w=800&auto=format&fit=crop" alt="Caretta Caretta">
       <h3>Koruma Altında Bir Yaşam</h3>
       <p>Lara bugün hayatta, ama yavruları onun kadar şanslı olacak mı? Kumsallardaki ışık kirliliği ve plastikler yolculuklarını tehdit ediyor. Lara yardımlarınıza muhtaç.</p>
@@ -105,7 +104,7 @@
     ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline, Point, webMercatorUtils) {
 
       const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
-      const STEP_MS = 35; // Akıcı hız
+      const STEP_MS = 40; // İdeal akışkan ve süzülme hızı
 
       const webmap = new WebMap({
         portalItem: { id: WEBMAP_PORTAL_ITEM_ID },
@@ -137,8 +136,8 @@
       let activeLineGraphic = null;
       let activePointGraphic = null;
 
-      // Adım yoğunluğunu 3'e düşürerek hem akıcılığı artırdık hem de aşırı yükü (cache/fps sorununu) kaldırdık
-      function densifyPath(path, subdivisions = 3) {
+      // Subdivision'ı 10 yaparak muazzam bir süzülme ve pürüzsüzlük sağladık
+      function densifyPath(path, subdivisions = 10) {
         const dense = [];
         for (let i = 0; i < path.length - 1; i++) {
           const p1 = path[i];
@@ -196,16 +195,17 @@
             return [wm.x, wm.y];
           });
 
-          fullPath = densifyPath(convertedPath, 3); 
+          fullPath = densifyPath(convertedPath, 10); 
 
-          sourceText.textContent = "GPS Verisi Aktif • Canlı İzleme";
+          sourceText.textContent = "GPS Verisi Aktif • Sinematik Mod";
           storyText.textContent = "Lara Akdeniz'de dolaşıyor...";
 
           scrub.max = fullPath.length;
           scrub.value = 1;
           
           const lineGeom = new Polyline({ paths: [fullPath], spatialReference: spatialRef });
-          await view.goTo(lineGeom.extent.expand(1.8), { animate: false });
+          // Extent'i genişleterek cache ve performans yükünü optimize ettik (2.5 kat geniş açı)
+          await view.goTo(lineGeom.extent.expand(2.5), { animate: false });
 
           initGraphics();
           drawUpTo(1, false);
@@ -226,7 +226,7 @@
             endModalOverlay.style.display = "none";
             scrub.value = 1;
             drawUpTo(1, true);
-            view.goTo(lineGeom.extent.expand(1.8), { animate: true, duration: 600 });
+            view.goTo(lineGeom.extent.expand(2.5), { animate: true, duration: 800 });
           });
 
           closeModal.addEventListener("click", () => {
@@ -273,7 +273,7 @@
           storyText.textContent = "Rotanın sonuna yaklaşılıyor...";
         } else {
           storyText.textContent = "Lara güvenli noktaya ulaştı. 🌿";
-          endModalOverlay.style.display = "flex"; // Ortadaki vurucu modalı aç
+          endModalOverlay.style.display = "flex";
         }
       }
 
@@ -291,11 +291,11 @@
           const tipPoint = new Point({ x: tip[0], y: tip[1], spatialReference: spatialRef });
           activePointGraphic.geometry = tipPoint;
 
-          // Sadece her 4 adımda bir kamerayı güncelleyerek sarsıntıyı ve FPS yükünü sıfırladık
-          if (followCam.checked && isPlaying && animateCamera && index % 4 === 0) {
+          // Geniş açılı ve çok sık boğmayan kamera takip döngüsü (Her 8 adımda bir yumuşak merkezleme)
+          if (followCam.checked && isPlaying && animateCamera && index % 8 === 0) {
             view.center = tipPoint;
-            if (view.zoom !== 12.5) {
-              view.zoom = 12.5;
+            if (view.zoom !== 11) {
+              view.zoom = 11; // Daha geniş, uzaktan bakan sinematik açı
             }
           }
         }
