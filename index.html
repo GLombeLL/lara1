@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Lara'nın Rotası — Yumuşak Süzülme ve Genel Görünüm</title>
+  <title>Lara'nın Rotası — Sakin ve Geniş Açı</title>
   <style>
     html, body {
       padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden;
@@ -65,7 +65,7 @@
     ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline, Point) {
 
       const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
-      const STEP_MS = 250; // İdeal, sakin ve akıcı hız
+      const STEP_MS = 400; // Hız yavaşlatıldı (daha sakin ve akıcı geçiş)
 
       const webmap = new WebMap({
         portalItem: { id: WEBMAP_PORTAL_ITEM_ID },
@@ -134,7 +134,7 @@
           scrub.max = fullPath.length;
           scrub.value = 1;
           
-          // 1. ÖNCE GENEL GÖRÜNÜM: Tüm rotayı kapsayan genel ekrana genişçe odaklanıyoruz
+          // İlk açılış genel görünümü
           const lineGeom = new Polyline({ paths: [fullPath], spatialReference: spatialRef });
           await view.goTo(lineGeom.extent.expand(1.6), { animate: false });
 
@@ -198,14 +198,14 @@
             }
           }));
 
-          // 2. SÜZÜLEREK TAKİP: Kamera ani sıçramak yerine yumuşak bir animasyonla noktayı izler
+          // Genişletilmiş zoom seviyesi (13.5) ve yumuşak süzülme süresi (350ms)
           if (followCam.checked && isPlaying) {
             view.goTo({
               target: tipPoint,
-              zoom: Math.max(view.zoom, 15)
+              zoom: 13.5 
             }, { 
               animate: true, 
-              duration: 200 // Adım süresiyle uyumlu, uçuşmayı önleyen süzülme efekti
+              duration: 350 
             });
           }
         }
