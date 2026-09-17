@@ -6,7 +6,7 @@
   <title>Lara'nın Rotası — Kümülatif Animasyon</title>
   <style>
     body, html { margin:0; padding:0; width:100%; height:100%; font-family:'Segoe UI',Tahoma,sans-serif; background:#1a1a1a; color:#e0e0e0; overflow:hidden; }
-    #viewDiv { width:100%; height:100%; position:absolute; background-color: #1a1a1a; }
+    #viewDiv { width:100%; height:100%; position:absolute; background-color:#1a1a1a; }
     .control-panel {
       position:absolute; top:20px; left:20px; z-index:99;
       background:rgba(18,18,18,0.92); backdrop-filter:blur(12px);
@@ -43,7 +43,7 @@
     <div class="section-label">İlerleme</div>
     <input type="range" id="scrubSlider" min="1" max="122" value="1" step="1">
     <div id="progressText">Nokta 1 / 122</div>
-    <div id="sourceText">Sıralama kaynağı belirleniyor…</div>
+    <div id="sourceText">Rota katmanı aranıyor…</div>
 
     <label class="chk"><input type="checkbox" id="followCam" checked> Kamera rotayı takip etsin</label>
   </div>
@@ -52,6 +52,7 @@
 
   <script>
     require([
+      "esri/Map",
       "esri/WebMap",
       "esri/views/MapView",
       "esri/Basemap",
@@ -59,7 +60,7 @@
       "esri/layers/GraphicsLayer",
       "esri/Graphic",
       "esri/geometry/Polyline"
-    ], function(WebMap, MapView, Basemap, TileLayer, GraphicsLayer, Graphic, Polyline) {
+    ], function(Map, WebMap, MapView, Basemap, TileLayer, GraphicsLayer, Graphic, Polyline) {
 
       // =====================================================================
       // AYARLAR
@@ -71,11 +72,21 @@
       const TURTLE_SIZE = 22;
       // =====================================================================
 
-      const webmap = new WebMap({ portalItem: { id: WEBMAP_PORTAL_ITEM_ID } });
-      const view = new MapView({ container: "viewDiv", map: webmap });
+      // ---- Kendi kontrolümüzdeki, WebMap'ten TAMAMEN bağımsız güvenli harita ----
+      // WebMap'i sadece rota katmanını "almak" için kullanacağız, render zincirine hiç sokmuyoruz.
+      // Böylece WebMap'in kendi (muhtemelen API-key gerektiren) basemap'i asla geri gelemez.
+      const safeMap = new Map({
+        basemap: new Basemap({
+          baseLayers: [
+            new TileLayer({ url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer" })
+          ]
+        })
+      });
 
       const animLayer = new GraphicsLayer();
-      webmap.add(animLayer);
+      safeMap.add(animLayer);
+
+      const view = new MapView({ container: "viewDiv", map: safeMap });
 
       const playBtn = document.getElementById("playBtn");
       const resetBtn = document.getElementById("resetBtn");
@@ -90,20 +101,7 @@
       let isPlaying = false;
 
       view.when(async () => {
-        await webmap.load();
-
-        // WebMap'in kendi basemap'i (API-key gerektiren yeni Esri stil servisine bağlı olabilir)
-        // yerine, anahtar gerektirmeyen, herkese açık bir basemap'i zorla devreye sokuyoruz.
-        // Bu, "arka plan siyah" sorununun en yaygın nedenidir.
-        webmap.basemap = new Basemap({
-          baseLayers: [
-            new TileLayer({
-              url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer"
-            })
-          ]
-        });
-
-        const fromLine = await loadFromPolyline();
+        const fromLine = await loadRouteFromWebMap();
         if (!fromLine || !fromLine.path || fromLine.path.length === 0) {
           sourceText.textContent = "⚠️ Rota katmanı bulunamadı veya boş.";
           return;
@@ -111,11 +109,15 @@
 
         fullPath = fromLine.path;
         spatialRef = fromLine.spatialReference;
-        sourceText.textContent = `Sıralama kaynağı: Polyline Vertex (${fullPath.length} nokta)`;
+        sourceText.textContent = `Rota yüklendi: ${fullPath.length} nokta`;
 
         scrub.max = fullPath.length;
         scrub.value = 1;
         progressText.textContent = `Nokta 1 / ${fullPath.length}`;
+
+        // İlk nokta merkezli, makul bir başlangıç görünümü (basemap zaten hazır)
+        view.goTo({ center: [fullPath[0][0], fullPath[0][1]], zoom: FOLLOW_ZOOM }, { duration: 0 });
+
         drawUpTo(1);
 
         scrub.addEventListener("input", () => {
@@ -133,20 +135,19 @@
         });
       });
 
-      async function loadFromPolyline() {
-        let routeLayer = null;
-
+      // WebMap'i SADECE veri (rota katmanı) çekmek için kullanıyoruz — view.map olarak asla atamıyoruz
+      async function loadRouteFromWebMap() {
+        const webmap = new WebMap({ portalItem: { id: WEBMAP_PORTAL_ITEM_ID } });
+        await webmap.load();
         await webmap.loadAll();
-        for (let layer of webmap.allLayers) {
-          if (layer.type === "feature") {
-            await layer.load();
-            if (layer.geometryType === "polyline") {
-              routeLayer = layer;
-              break;
-            }
+
+        let routeLayer = null;
+        for (const layer of webmap.allLayers) {
+          if (layer.type === "feature" && layer.geometryType === "polyline") {
+            routeLayer = layer;
+            break;
           }
         }
-
         if (!routeLayer) return null;
 
         const q = routeLayer.createQuery();
@@ -157,10 +158,9 @@
         const result = await routeLayer.queryFeatures(q);
         if (result.features.length === 0) return null;
 
-        routeLayer.visible = false;
         const geom = result.features[0].geometry;
-
         if (!geom.paths || geom.paths.length === 0) return null;
+
         return { path: geom.paths[0], spatialReference: geom.spatialReference || view.spatialReference };
       }
 
