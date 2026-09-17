@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Lara'nın Rotası — Kesin Çözüm</title>
+  <title>Lara'nın Rotası — Aydınlık Harita</title>
   <style>
     html, body {
       padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden;
-      font-family: 'Segoe UI', Tahoma, sans-serif; background: #1a1a1a;
+      font-family: 'Segoe UI', Tahoma, sans-serif; background: #0f172a;
     }
     #viewDiv { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
     .control-panel {
@@ -67,8 +67,10 @@
       const STEP_MS = 120;
       const FOLLOW_ZOOM = 15;
 
+      // WebMap'e zorunlu baz harita atayarak siyah ekranı engelliyoruz
       const webmap = new WebMap({
-        portalItem: { id: WEBMAP_PORTAL_ITEM_ID }
+        portalItem: { id: WEBMAP_PORTAL_ITEM_ID },
+        basemap: "streets-navigation-vector" 
       });
 
       const view = new MapView({
@@ -167,7 +169,7 @@
           const line = new Polyline({ paths: [partial], spatialReference: spatialRef });
           animLayer.add(new Graphic({
             geometry: line,
-            symbol: { type: "simple-line", color: [76, 209, 165, 0.95], width: 3 }
+            symbol: { type: "simple-line", color: [14, 165, 233, 0.95], width: 4 }
           }));
         }
 
@@ -175,14 +177,13 @@
         if (tip) {
           const tipPoint = { type: "point", x: tip[0], y: tip[1], spatialReference: spatialRef };
           
-          // Emoji hatasını bitiren güvenli nokta sembolü (Parlak turuncu imleç)
           animLayer.add(new Graphic({
             geometry: tipPoint,
             symbol: {
               type: "simple-marker",
               style: "circle",
-              color: [255, 107, 107, 1],
-              size: 10,
+              color: [239, 68, 68, 1],
+              size: 12,
               outline: { color: [255, 255, 255, 1], width: 2 }
             }
           }));
