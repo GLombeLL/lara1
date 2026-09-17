@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>Lara'nın Rotası — Kümülatif Animasyon</title>
+  <style>
+    body, html { margin:0; padding:0; width:100%; height:100%; font-family:'Segoe UI',Tahoma,sans-serif; background:#121212; color:#e0e0e0; overflow:hidden; }
+    #viewDiv { width:100%; height:100%; position:absolute; }
+    .control-panel {
+      position:absolute; top:20px; left:20px; z-index:99;
+      background:rgba(18,18,18,0.92); backdrop-filter:blur(12px);
+      border:1px solid rgba(255,255,255,0.15); padding:20px; border-radius:12px; width:340px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.7);
+    }
+    .control-panel h2 { font-size:15px; margin:0 0 15px 0; color:#4CAF50; text-transform:uppercase; letter-spacing:1px; }
+    .row { display:flex; gap:8px; margin-bottom:14px; }
+    button {
+      flex:1; padding:9px 0; border-radius:8px; border:1px solid rgba(255,255,255,0.2);
+      background:#1e1e1e; color:#e0e0e0; font-size:13px; font-weight:700; cursor:pointer;
+    }
+    button.primary { background:#1C7293; border-color:#1C7293; }
+    button:hover { opacity:0.85; }
+    .section-label { font-size:11px; color:#8a8a8a; text-transform:uppercase; letter-spacing:1px; margin:10px 0 6px 0; }
+    input[type=range] { width:100%; cursor:pointer; }
+    #progressText { font-size:13px; margin-top:6px; color:#b0b0b0; }
+    label.chk { font-size:12px; color:#b0b0b0; display:flex; align-items:center; gap:6px; margin-top:10px; }
+  </style>
+  <link rel="stylesheet" href="https://js.arcgis.com/4.28/esri/themes/dark/main.css" />
+  <script src="https://js.arcgis.com/4.28/"></script>
+</head>
+<body>
+
+  <div class="control-panel">
+    <h2>Lara'nın Rotası</h2>
+
+    <div class="row">
+      <button id="playBtn" class="primary">▶ Oynat</button>
+      <button id="resetBtn">↺ Başa Sar</button>
+    </div>
+
+    <div class="section-label">İlerleme (1 / 122)</div>
+    <input type="range" id="scrubSlider" min="1" max="122" value="1" step="1">
+    <div id="progressText">Nokta 1 / 122</div>
+
+    <label class="chk"><input type="checkbox" id="followCam" checked> Kamera rotayı takip etsin</label>
+  </div>
+
+  <div id="viewDiv"></div>
+
+  <script>
+    require([
+      "esri/WebScene",
+      "esri/views/SceneView",
+      "esri/layers/GraphicsLayer",
+      "esri/Graphic",
+      "esri/geometry/Polyline"
+    ], function(WebScene, SceneView, GraphicsLayer, Graphic, Polyline) {
+
+      // =====================================================================
+      // AYARLAR — buradan uyarlayın
+      // =====================================================================
+      const SCENE_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c"; // sahneniz
+      const ROUTE_LAYER_TITLE_HINT = "lara_polylines1";  // katman adı (küçük harf, kısmi eşleşme yeterli)
+      const STEP_MS = 120;           // otomatik oynatmada nokta başına süre (ms) — hızı buradan ayarlayın
+      const FOLLOW_TILT = 65;
+      const FOLLOW_SCALE = 6000;     // kamera takip ederken ne kadar yakın dursun
+      const TURTLE_EMOJI = "🐢";     // rotanın ucunda birlikte hareket eden işaret
+      const TURTLE_SIZE = 26;        // emoji boyutu
+      // =====================================================================
+
+      const scene = new WebScene({ portalItem: { id: SCENE_PORTAL_ITEM_ID } });
+      const view = new SceneView({ container: "viewDiv", map: scene });
+
+      const animLayer = new GraphicsLayer({ elevationInfo: { mode: "relative-to-ground", offset: 5 } });
+      scene.add(animLayer);
+
+      const playBtn = document.getElementById("playBtn");
+      const resetBtn = document.getElementById("resetBtn");
+      const scrub = document.getElementById("scrubSlider");
+      const progressText = document.getElementById("progressText");
+      const followCam = document.getElementById("followCam");
+
+      let fullPath = null;
+      let spatialRef = null;
+      let timer = null;
+      let isPlaying = false;
+
+      view.when(() => {
+        scene.when(() => {
+
+          // Rota katmanını bul: önce isimde "lara" geçen katmanı arar,
+          // bulamazsa tek polyline katmanını kullanır.
+          let routeLayer = scene.allLayers.find(l =>
+            l.type === "feature" && l.title && l.title.toLowerCase().includes(ROUTE_LAYER_TITLE_HINT)
+          );
+          if (!routeLayer) {
+            routeLayer = scene.allLayers.find(l => l.type === "feature" && l.geometryType === "polyline");
+          }
+
+          if (!routeLayer) {
+            console.error("❌ Rota (polyline) katmanı bulunamadı. ROUTE_LAYER_TITLE_HINT değerini kontrol edin.");
+            return;
+          }
+
+          routeLayer.load().then(() => {
+            const q = routeLayer.createQuery();
+            q.where = "1=1";
+            q.returnGeometry = true;
+            q.outSpatialReference = view.spatialReference;
+
+            routeLayer.queryFeatures(q).then((result) => {
+              if (result.features.length === 0) {
+                console.error("❌ Rota katmanında feature bulunamadı.");
+                return;
+              }
+
+              // İlk (ve muhtemelen tek) polyline feature'ın path'ini alıyoruz
+              const geom = result.features[0].geometry;
+              fullPath = geom.paths[0]; // [[x,y,(z)], [x,y,(z)], ... 122 nokta]
+              spatialRef = geom.spatialReference;
+
+              scrub.max = fullPath.length;
+              scrub.value = 1;
+              progressText.textContent = `Nokta 1 / ${fullPath.length}`;
+
+              // Orijinal katmanı gizleyip yerine kendi animasyonumuzu çiziyoruz
+              routeLayer.visible = false;
+
+              drawUpTo(1);
+
+              scrub.addEventListener("input", () => {
+                stopPlaying();
+                drawUpTo(parseInt(scrub.value));
+              });
+
+              playBtn.addEventListener("click", () => {
+                if (isPlaying) { stopPlaying(); return; }
+                startPlaying();
+              });
+
+              resetBtn.addEventListener("click", () => {
+                stopPlaying();
+                scrub.value = 1;
+                drawUpTo(1);
+              });
+            });
+          });
+        });
+      });
+
+      function drawUpTo(index) {
+        animLayer.removeAll();
+        if (!fullPath || index < 1) return;
+
+        const partial = fullPath.slice(0, index);
+        progressText.textContent = `Nokta ${index} / ${fullPath.length}`;
+        scrub.value = index;
+
+        if (partial.length >= 2) {
+          const line = new Polyline({ paths: [partial], spatialReference: spatialRef });
+          animLayer.add(new Graphic({
+            geometry: line,
+            symbol: {
+              type: "line-3d",
+              symbolLayers: [{ type: "line", material: { color: [76, 209, 165, 0.95] }, size: 3 }]
+            }
+          }));
+        }
+
+        // Rotanın ucunda birlikte ilerleyen kaplumbağa işareti
+        const tip = partial[partial.length - 1];
+        const tipPoint = { type: "point", x: tip[0], y: tip[1], z: tip[2] || 0, spatialReference: spatialRef };
+        animLayer.add(new Graphic({
+          geometry: tipPoint,
+          symbol: {
+            type: "point-3d",
+            symbolLayers: [{
+              type: "text",
+              text: TURTLE_EMOJI,
+              size: TURTLE_SIZE,
+              material: { color: [255, 255, 255, 1] }
+            }]
+          }
+        }));
+
+        if (followCam.checked) {
+          view.goTo({ target: tipPoint, scale: FOLLOW_SCALE, tilt: FOLLOW_TILT }, { duration: 400, easing: "linear" });
+        }
+      }
+
+      function startPlaying() {
+        isPlaying = true;
+        playBtn.textContent = "⏸ Durdur";
+        let idx = parseInt(scrub.value);
+        timer = setInterval(() => {
+          idx++;
+          if (idx > fullPath.length) { stopPlaying(); return; }
+          drawUpTo(idx);
+        }, STEP_MS);
+      }
+
+      function stopPlaying() {
+        isPlaying = false;
+        playBtn.textContent = "▶ Oynat";
+        if (timer) clearInterval(timer);
+        timer = null;
+      }
+
+    });
+  </script>
+</body>
+</html>
