@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Lara'nın Rotası — Kesin Kamera Sabitleme</title>
+  <title>Lara'nın Rotası — Kararlı Hız ve Projeksiyon Düzeltmesi</title>
   <style>
     html, body {
       padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden;
@@ -65,7 +65,7 @@
     ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline, Point) {
 
       const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
-      const STEP_MS = 100;
+      const STEP_MS = 250; // Akış hızı yavaşlatıldı (Daha akıcı ve kontrol edilebilir)
 
       const webmap = new WebMap({
         portalItem: { id: WEBMAP_PORTAL_ITEM_ID },
@@ -112,6 +112,7 @@
             return;
           }
 
+          // Sorguyu view'ın kendi uzaysal referansına zorlayarak projeksiyon kaymalarını önlüyoruz
           const q = routeLayer.createQuery();
           q.where = "1=1";
           q.returnGeometry = true;
@@ -127,7 +128,7 @@
           const geom = result.features[0].geometry;
           
           fullPath = geom.paths[0].reverse();
-          spatialRef = geom.spatialReference || view.spatialReference;
+          spatialRef = view.spatialReference; // View referansını baz alarak denize gömülmeyi engelliyoruz
 
           sourceText.textContent = `Aktif Rota: ${fullPath.length} nokta yüklendi.`;
 
@@ -196,7 +197,7 @@
             }
           }));
 
-          // Kamerayı doğrudan Point nesnesiyle güvenli şekilde ortalıyoruz
+          // Kamera takibini güvenli ve kontrollü merkeze sabitleme
           if (followCam.checked) {
             view.center = tipPoint;
             if (!view.zoom || view.zoom < 15) {
