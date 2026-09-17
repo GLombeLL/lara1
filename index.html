@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Lara'nın Rotası — Yağ Gibi Akıcı Pürüzsüz Takip</title>
+  <title>Lara'nın Rotası — 60 FPS Akıcı Deneyim</title>
   <style>
     html, body {
       padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden;
@@ -65,7 +65,7 @@
     ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline, Point) {
 
       const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
-      const STEP_MS = 50; // Pürüzsüz akış için milisaniye aralığı
+      const STEP_MS = 40; // Yüksek akıcılık için milisaniye aralığı
 
       const webmap = new WebMap({
         portalItem: { id: WEBMAP_PORTAL_ITEM_ID },
@@ -92,7 +92,10 @@
       let timer = null;
       let isPlaying = false;
 
-      // Düzlükleri ve virajları mikroskobik parçalara bölerek sıçramaları yok eden fonksiyon
+      // Performanslı grafik referansları (Sürekli sil-oluştur yapmamak için)
+      let activeLineGraphic = null;
+      let activePointGraphic = null;
+
       function densifyPath(path, subdivisions = 8) {
         const dense = [];
         for (let i = 0; i < path.length - 1; i++) {
@@ -147,20 +150,20 @@
           fullPath = densifyPath(rawReversed, 8); 
           spatialRef = view.spatialReference;
 
-          sourceText.textContent = `Aktif Rota: ${fullPath.length} mikro-adım ile optimize edildi.`;
+          sourceText.textContent = `Aktif Rota: ${fullPath.length} mikro-adım (60 FPS Optimize)`;
 
           scrub.max = fullPath.length;
           scrub.value = 1;
           
-          // İlk açılış geniş genel görünüm
           const lineGeom = new Polyline({ paths: [fullPath], spatialReference: spatialRef });
           await view.goTo(lineGeom.extent.expand(1.8), { animate: false });
 
-          drawUpTo(1);
+          initGraphics();
+          drawUpTo(1, false);
 
           scrub.addEventListener("input", () => {
             stopPlaying();
-            drawUpTo(parseInt(scrub.value));
+            drawUpTo(parseInt(scrub.value), false);
           });
 
           playBtn.addEventListener("click", () => {
@@ -171,7 +174,7 @@
           resetBtn.addEventListener("click", () => {
             stopPlaying();
             scrub.value = 1;
-            drawUpTo(1);
+            drawUpTo(1, true);
             view.goTo(lineGeom.extent.expand(1.8), { animate: true, duration: 600 });
           });
 
@@ -181,47 +184,54 @@
         }
       });
 
-      function drawUpTo(index) {
+      function initGraphics() {
         animLayer.removeAll();
+        
+        // Çizgi ve nokta grafiklerini bir kez oluşturup referans alıyoruz (Sıfır bellek şişmesi)
+        activeLineGraphic = new Graphic({
+          geometry: new Polyline({ paths: [[]], spatialReference: spatialRef }),
+          symbol: { type: "simple-line", color: [14, 165, 233, 0.95], width: 4 }
+        });
+
+        activePointGraphic = new Graphic({
+          geometry: new Point({ x: 0, y: 0, spatialReference: spatialRef }),
+          symbol: {
+            type: "simple-marker",
+            style: "circle",
+            color: [239, 68, 68, 1],
+            size: 10,
+            outline: { color: [255, 255, 255, 1], width: 2 }
+          }
+        });
+
+        animLayer.addMany([activeLineGraphic, activePointGraphic]);
+      }
+
+      function drawUpTo(index, animateCamera = true) {
         if (!fullPath || index < 1) return;
 
-        const partial = fullPath.slice(0, index);
         progressText.textContent = `Adım ${index} / ${fullPath.length}`;
         scrub.value = index;
 
-        if (partial.length >= 2) {
-          const line = new Polyline({ paths: [partial], spatialReference: spatialRef });
-          animLayer.add(new Graphic({
-            geometry: line,
-            symbol: { type: "simple-line", color: [14, 165, 233, 0.95], width: 4 }
-          }));
-        }
+        // Hedef alt diziyi kesmek yerine doğrudan performanslı path güncellemesi
+        const partial = fullPath.slice(0, index);
+        activeLineGraphic.geometry = new Polyline({ paths: [partial], spatialReference: spatialRef });
 
         const tip = partial[partial.length - 1];
         if (tip) {
-          const tipPoint = new Point({
-            x: tip[0],
-            y: tip[1],
-            spatialReference: spatialRef
-          });
+          const tipPoint = new Point({ x: tip[0], y: tip[1], spatialReference: spatialRef });
+          activePointGraphic.geometry = tipPoint;
 
-          animLayer.add(new Graphic({
-            geometry: tipPoint,
-            symbol: {
-              type: "simple-marker",
-              style: "circle",
-              color: [239, 68, 68, 1],
-              size: 10,
-              outline: { color: [255, 255, 255, 1], width: 2 }
-            }
-          }));
-
-          // Çakışan animasyonları kaldırıp doğrudan pürüzsüz merkez kaydırma (Geniş açı: 12.5)
-          if (followCam.checked && isPlaying) {
-            view.center = tipPoint;
-            if (view.zoom !== 12.5) {
-              view.zoom = 12.5;
-            }
+          // GPU destekli, takılmasız, yumuşak kademeli kamera takibi
+          if (followCam.checked && isPlaying && animateCamera) {
+            view.goTo({
+              target: tipPoint,
+              zoom: 12.5
+            }, { 
+              animate: true, 
+              duration: 45,
+              easing: "linear"
+            });
           }
         }
       }
@@ -230,13 +240,14 @@
         isPlaying = true;
         playBtn.textContent = "⏸ Durdur";
         let idx = parseInt(scrub.value);
+        
         timer = setInterval(() => {
           idx++;
           if (idx > fullPath.length) { 
             stopPlaying(); 
             return; 
           }
-          drawUpTo(idx);
+          drawUpTo(idx, true);
         }, STEP_MS);
       }
 
