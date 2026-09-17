@@ -63,9 +63,9 @@
       // AYARLAR
       // =====================================================================
       const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
-      const ROUTE_LAYER_TITLE_HINT = "lara_polylines1"; // polyline katmanı (fallback kaynağı)
-      const STEP_MS = 120;            // otomatik oynatmada nokta başına süre (ms)
-      const FOLLOW_ZOOM = 15;         // kamera takip ederken yaklaşma seviyesi
+      const ROUTE_LAYER_TITLE_HINT = "Lara_Polylines1"; 
+      const STEP_MS = 120;             
+      const FOLLOW_ZOOM = 15;          
       const TURTLE_EMOJI = "🐢";
       const TURTLE_SIZE = 22;
       // =====================================================================
@@ -83,97 +83,62 @@
       const sourceText = document.getElementById("sourceText");
       const followCam = document.getElementById("followCam");
 
-      let fullPath = null;   // [[x,y], [x,y], ...] sıralı
+      let fullPath = null;   
       let spatialRef = null;
       let timer = null;
       let isPlaying = false;
 
-      view.when(() => {
-        webmap.when(async () => {
-          await webmap.loadAll();
+      view.when(async () => {
+        await webmap.load();
 
-          const orderedPoints = await tryLoadFromGunField();
-          if (orderedPoints) {
-            fullPath = orderedPoints.path;
-            spatialRef = orderedPoints.spatialReference;
-            sourceText.textContent = `Sıralama kaynağı: "${orderedPoints.fieldName}" alanı (${fullPath.length} nokta)`;
-          } else {
-            const fromLine = await loadFromPolyline();
-            if (!fromLine) {
-              console.error("❌ Ne 'Gün' alanlı nokta katmanı ne de polyline bulundu.");
-              sourceText.textContent = "⚠️ Rota verisi bulunamadı — konsolu kontrol edin.";
-              return;
-            }
-            fullPath = fromLine.path;
-            spatialRef = fromLine.spatialReference;
-            sourceText.textContent = `Sıralama kaynağı: polyline vertex sırası (${fullPath.length} nokta)`;
-          }
+        // Doğrudan polyline katmanını bul ve vertex'lerini kümülatif çizim için diziye dök
+        const fromLine = await loadFromPolyline();
+        if (!fromLine || !fromLine.path || fromLine.path.length === 0) {
+          sourceText.textContent = "⚠️ Rota katmanı bulunamadı veya boş.";
+          return;
+        }
 
-          scrub.max = fullPath.length;
+        fullPath = fromLine.path;
+        spatialRef = fromLine.spatialReference;
+        sourceText.textContent = `Sıralama kaynağı: Polyline Vertex (${fullPath.length} nokta)`;
+
+        scrub.max = fullPath.length;
+        scrub.value = 1;
+        progressText.textContent = `Nokta 1 / ${fullPath.length}`;
+        drawUpTo(1);
+
+        scrub.addEventListener("input", () => {
+          stopPlaying();
+          drawUpTo(parseInt(scrub.value));
+        });
+        playBtn.addEventListener("click", () => {
+          if (isPlaying) { stopPlaying(); return; }
+          startPlaying();
+        });
+        resetBtn.addEventListener("click", () => {
+          stopPlaying();
           scrub.value = 1;
-          progressText.textContent = `Nokta 1 / ${fullPath.length}`;
           drawUpTo(1);
-
-          scrub.addEventListener("input", () => {
-            stopPlaying();
-            drawUpTo(parseInt(scrub.value));
-          });
-          playBtn.addEventListener("click", () => {
-            if (isPlaying) { stopPlaying(); return; }
-            startPlaying();
-          });
-          resetBtn.addEventListener("click", () => {
-            stopPlaying();
-            scrub.value = 1;
-            drawUpTo(1);
-          });
         });
       });
 
-      // Öncelikli yol: aynı haritada "Gün"/"Gun" alanlı bir NOKTA katmanı ara, varsa ondan sıralı çek
-      async function tryLoadFromGunField() {
-        const pointLayers = webmap.allLayers.filter(l => l.type === "feature" && l.geometryType === "point").toArray();
-
-        for (const pl of pointLayers) {
-          try {
-            await pl.load();
-            const gunField = pl.fields && pl.fields.find(f => {
-              const n = f.name.toLowerCase();
-              return n === "gün" || n === "gun" || n.includes("gun");
-            });
-            if (!gunField) continue;
-
-            const q = pl.createQuery();
-            q.where = "1=1";
-            q.outFields = ["*"];
-            q.returnGeometry = true;
-            q.outSpatialReference = view.spatialReference;
-            q.orderByFields = [gunField.name + " ASC"];
-
-            const res = await pl.queryFeatures(q);
-            if (res.features.length === 0) continue;
-
-            const path = res.features.map(f => [f.geometry.x, f.geometry.y]);
-            console.log(`✅ Sıralama '${gunField.name}' alanından alındı (${path.length} nokta) — katman: ${pl.title}`);
-            return { path, spatialReference: res.spatialReference || view.spatialReference, fieldName: gunField.name };
-          } catch (e) {
-            console.warn("Nokta katmanı kontrol edilirken sorun:", pl.title, e);
+      async function loadFromPolyline() {
+        let routeLayer = null;
+        
+        // Haritadaki katmanların yüklenmesini bekleyip katmanı yakala
+        await webmap.loadAll();
+        for (let layer of webmap.allLayers) {
+          if (layer.type === "feature") {
+            await layer.load();
+            if (layer.geometryType === "polyline") {
+              routeLayer = layer;
+              break;
+            }
           }
         }
-        return null;
-      }
 
-      // Yedek yol: polyline'ın kendi vertex sırasını kullan
-      async function loadFromPolyline() {
-        let routeLayer = webmap.allLayers.find(l =>
-          l.type === "feature" && l.title && l.title.toLowerCase().includes(ROUTE_LAYER_TITLE_HINT)
-        );
-        if (!routeLayer) {
-          routeLayer = webmap.allLayers.find(l => l.type === "feature" && l.geometryType === "polyline");
-        }
         if (!routeLayer) return null;
 
-        await routeLayer.load();
         const q = routeLayer.createQuery();
         q.where = "1=1";
         q.returnGeometry = true;
@@ -182,9 +147,11 @@
         const result = await routeLayer.queryFeatures(q);
         if (result.features.length === 0) return null;
 
-        routeLayer.visible = false; // kendi animasyonumuzu göstereceğiz
+        routeLayer.visible = false; // Orijinal katmanı gizleyip kendi animasyon katmanımızı öne alıyoruz
         const geom = result.features[0].geometry;
-        return { path: geom.paths[0], spatialReference: geom.spatialReference };
+        
+        if (!geom.paths || geom.paths.length === 0) return null;
+        return { path: geom.paths[0], spatialReference: geom.spatialReference || view.spatialReference };
       }
 
       function drawUpTo(index) {
@@ -218,8 +185,8 @@
           }
         }));
 
-        if (followCam.checked) {
-          view.goTo({ center: [tip[0], tip[1]], zoom: Math.max(view.zoom, FOLLOW_ZOOM) }, { duration: 400, easing: "linear" });
+        if (followCam.checked && tip) {
+          view.goTo({ center: [tip[0], tip[1]], zoom: Math.max(view.zoom, FOLLOW_ZOOM) }, { duration: 300, easing: "linear" });
         }
       }
 
@@ -229,7 +196,10 @@
         let idx = parseInt(scrub.value);
         timer = setInterval(() => {
           idx++;
-          if (idx > fullPath.length) { stopPlaying(); return; }
+          if (idx > fullPath.length) { 
+            stopPlaying(); 
+            return; 
+          }
           drawUpTo(idx);
         }, STEP_MS);
       }
