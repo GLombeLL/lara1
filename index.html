@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Lara'nın Rotası — Yoğunlaştırılmış Pürüzsüz Akış</title>
+  <title>Lara'nın Rotası — Yağ Gibi Akıcı Pürüzsüz Takip</title>
   <style>
     html, body {
       padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden;
@@ -46,7 +46,7 @@
 
     <div class="section-label">İlerleme</div>
     <input type="range" id="scrubSlider" min="1" max="100" value="1" step="1">
-    <div id="progressText">Nokta 1 / 100</div>
+    <div id="progressText">Adım 1 / 100</div>
     <div id="sourceText">Harita yükleniyor…</div>
 
     <label class="chk"><input type="checkbox" id="followCam" checked> Kamera rotayı takip etsin</label>
@@ -65,7 +65,7 @@
     ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline, Point) {
 
       const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
-      const STEP_MS = 80; // Yoğunlaştırılmış minik adımlar için akıcı ve ideal milisaniye
+      const STEP_MS = 50; // Pürüzsüz akış için milisaniye aralığı
 
       const webmap = new WebMap({
         portalItem: { id: WEBMAP_PORTAL_ITEM_ID },
@@ -92,8 +92,8 @@
       let timer = null;
       let isPlaying = false;
 
-      // Uzun düzlüklerdeki boşlukları dolduran (interpolasyon) fonksiyon
-      function densifyPath(path, subdivisions = 6) {
+      // Düzlükleri ve virajları mikroskobik parçalara bölerek sıçramaları yok eden fonksiyon
+      function densifyPath(path, subdivisions = 8) {
         const dense = [];
         for (let i = 0; i < path.length - 1; i++) {
           const p1 = path[i];
@@ -143,12 +143,11 @@
           routeLayer.visible = false; 
           const geom = result.features[0].geometry;
           
-          // Önce ters çeviriyoruz, sonra düzlüklerin uçmasını engellemek için yoğunlaştırıyoruz
           const rawReversed = geom.paths[0].reverse();
-          fullPath = densifyPath(rawReversed, 6); 
+          fullPath = densifyPath(rawReversed, 8); 
           spatialRef = view.spatialReference;
 
-          sourceText.textContent = `Aktif Rota: ${fullPath.length} mikro-nokta ile pürüzsüzleştirildi.`;
+          sourceText.textContent = `Aktif Rota: ${fullPath.length} mikro-adım ile optimize edildi.`;
 
           scrub.max = fullPath.length;
           scrub.value = 1;
@@ -217,15 +216,12 @@
             }
           }));
 
-          // Genişletilmiş ve stabilize edilmiş kamera açısı (zoom: 12.5)
+          // Çakışan animasyonları kaldırıp doğrudan pürüzsüz merkez kaydırma (Geniş açı: 12.5)
           if (followCam.checked && isPlaying) {
-            view.goTo({
-              target: tipPoint,
-              zoom: 12.5 
-            }, { 
-              animate: true, 
-              duration: 90 
-            });
+            view.center = tipPoint;
+            if (view.zoom !== 12.5) {
+              view.zoom = 12.5;
+            }
           }
         }
       }
