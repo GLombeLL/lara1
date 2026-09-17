@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Lara'nın Rotası — Kararlı Hız ve Projeksiyon Düzeltmesi</title>
+  <title>Lara'nın Rotası — Yumuşak Süzülme ve Genel Görünüm</title>
   <style>
     html, body {
       padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden;
@@ -65,7 +65,7 @@
     ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline, Point) {
 
       const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
-      const STEP_MS = 250; // Akış hızı yavaşlatıldı (Daha akıcı ve kontrol edilebilir)
+      const STEP_MS = 250; // İdeal, sakin ve akıcı hız
 
       const webmap = new WebMap({
         portalItem: { id: WEBMAP_PORTAL_ITEM_ID },
@@ -112,7 +112,6 @@
             return;
           }
 
-          // Sorguyu view'ın kendi uzaysal referansına zorlayarak projeksiyon kaymalarını önlüyoruz
           const q = routeLayer.createQuery();
           q.where = "1=1";
           q.returnGeometry = true;
@@ -128,15 +127,16 @@
           const geom = result.features[0].geometry;
           
           fullPath = geom.paths[0].reverse();
-          spatialRef = view.spatialReference; // View referansını baz alarak denize gömülmeyi engelliyoruz
+          spatialRef = view.spatialReference;
 
           sourceText.textContent = `Aktif Rota: ${fullPath.length} nokta yüklendi.`;
 
           scrub.max = fullPath.length;
           scrub.value = 1;
           
+          // 1. ÖNCE GENEL GÖRÜNÜM: Tüm rotayı kapsayan genel ekrana genişçe odaklanıyoruz
           const lineGeom = new Polyline({ paths: [fullPath], spatialReference: spatialRef });
-          view.goTo(lineGeom.extent.expand(1.2));
+          await view.goTo(lineGeom.extent.expand(1.6), { animate: false });
 
           drawUpTo(1);
 
@@ -154,6 +154,7 @@
             stopPlaying();
             scrub.value = 1;
             drawUpTo(1);
+            view.goTo(lineGeom.extent.expand(1.6), { animate: true, duration: 500 });
           });
 
         } catch (err) {
@@ -197,12 +198,15 @@
             }
           }));
 
-          // Kamera takibini güvenli ve kontrollü merkeze sabitleme
-          if (followCam.checked) {
-            view.center = tipPoint;
-            if (!view.zoom || view.zoom < 15) {
-              view.zoom = 15;
-            }
+          // 2. SÜZÜLEREK TAKİP: Kamera ani sıçramak yerine yumuşak bir animasyonla noktayı izler
+          if (followCam.checked && isPlaying) {
+            view.goTo({
+              target: tipPoint,
+              zoom: Math.max(view.zoom, 15)
+            }, { 
+              animate: true, 
+              duration: 200 // Adım süresiyle uyumlu, uçuşmayı önleyen süzülme efekti
+            });
           }
         }
       }
