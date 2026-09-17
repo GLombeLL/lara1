@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Lara'nın Rotası — 60 FPS Akıcı Deneyim</title>
+  <title>Lara'nın Rotası — Kararlı ve Çakışmasız Akış</title>
   <style>
     html, body {
       padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden;
@@ -65,7 +65,7 @@
     ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline, Point) {
 
       const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
-      const STEP_MS = 40; // Yüksek akıcılık için milisaniye aralığı
+      const STEP_MS = 45; // Akıcı milisaniye aralığı
 
       const webmap = new WebMap({
         portalItem: { id: WEBMAP_PORTAL_ITEM_ID },
@@ -92,7 +92,6 @@
       let timer = null;
       let isPlaying = false;
 
-      // Performanslı grafik referansları (Sürekli sil-oluştur yapmamak için)
       let activeLineGraphic = null;
       let activePointGraphic = null;
 
@@ -150,7 +149,7 @@
           fullPath = densifyPath(rawReversed, 8); 
           spatialRef = view.spatialReference;
 
-          sourceText.textContent = `Aktif Rota: ${fullPath.length} mikro-adım (60 FPS Optimize)`;
+          sourceText.textContent = `Aktif Rota: ${fullPath.length} mikro-adım (Kararlı Mod)`;
 
           scrub.max = fullPath.length;
           scrub.value = 1;
@@ -187,7 +186,6 @@
       function initGraphics() {
         animLayer.removeAll();
         
-        // Çizgi ve nokta grafiklerini bir kez oluşturup referans alıyoruz (Sıfır bellek şişmesi)
         activeLineGraphic = new Graphic({
           geometry: new Polyline({ paths: [[]], spatialReference: spatialRef }),
           symbol: { type: "simple-line", color: [14, 165, 233, 0.95], width: 4 }
@@ -213,7 +211,6 @@
         progressText.textContent = `Adım ${index} / ${fullPath.length}`;
         scrub.value = index;
 
-        // Hedef alt diziyi kesmek yerine doğrudan performanslı path güncellemesi
         const partial = fullPath.slice(0, index);
         activeLineGraphic.geometry = new Polyline({ paths: [partial], spatialReference: spatialRef });
 
@@ -222,16 +219,12 @@
           const tipPoint = new Point({ x: tip[0], y: tip[1], spatialReference: spatialRef });
           activePointGraphic.geometry = tipPoint;
 
-          // GPU destekli, takılmasız, yumuşak kademeli kamera takibi
+          // Animasyon kuyruğunu şişiren goTo yerine doğrudan güvenli center ataması
           if (followCam.checked && isPlaying && animateCamera) {
-            view.goTo({
-              target: tipPoint,
-              zoom: 12.5
-            }, { 
-              animate: true, 
-              duration: 45,
-              easing: "linear"
-            });
+            view.center = tipPoint;
+            if (view.zoom !== 12.5) {
+              view.zoom = 12.5;
+            }
           }
         }
       }
