@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <title>Lara'nın Rotası — 2D Kesin Çözüm</title>
+  <title>Lara'nın Rotası — Kararlı Çözüm</title>
   <style>
     html, body {
       padding: 0; margin: 0; width: 100%; height: 100%; overflow: hidden;
@@ -64,10 +64,8 @@
     ], function(WebMap, MapView, GraphicsLayer, Graphic, Polyline) {
 
       const WEBMAP_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c";
-      const STEP_MS = 120;
-      const FOLLOW_ZOOM = 15;
+      const STEP_MS = 100;
 
-      // 2D MapView için WebMap ve güvenli baz harita
       const webmap = new WebMap({
         portalItem: { id: WEBMAP_PORTAL_ITEM_ID },
         basemap: "streets-navigation-vector"
@@ -133,6 +131,11 @@
 
           scrub.max = fullPath.length;
           scrub.value = 1;
+          
+          // İlk açılışta rotanın tamamına zoom yapıp sınırları oturtuyoruz
+          const lineGeom = new Polyline({ paths: [fullPath], spatialReference: spatialRef });
+          view.goTo(lineGeom.extent.expand(1.2));
+
           drawUpTo(1);
 
           scrub.addEventListener("input", () => {
@@ -188,8 +191,9 @@
             }
           }));
 
+          // Kamera takibi döngüyü patlatmayacak şekilde merkeze kilitleniyor
           if (followCam.checked) {
-            view.goTo({ center: [tip[0], tip[1]], zoom: Math.max(view.zoom, FOLLOW_ZOOM) }, { duration: 300, easing: "linear" });
+            view.center = [tip[0], tip[1]];
           }
         }
       }
