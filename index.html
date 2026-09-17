@@ -83,9 +83,9 @@
   <!-- Vurucu Final Modalı (Caretta Caretta Görseli) -->
   <div id="endModalOverlay">
     <div id="endCard">
-      <img src="https://images.unsplash.com/photo-1544551763-46a013bb70d5?q=80&w=800&auto=format&fit=crop" alt="Caretta Caretta">
+      <img src="https://img.aydinlik.com.tr/rcman/Cw1280h720q95gc/file/aydinlik-bucket/2019/11/28/d481083b-4255-4866-a947-a11cf9cae665.jpg">
       <h3>Koruma Altında Bir Yaşam</h3>
-      <p>Lara bugün hayatta, ama yavruları onun kadar şanslı olacak mı? Kumsallardaki ışık kirliliği ve plastikler yolculuklarını tehdit ediyor. Lara yardımlarınıza muhtaç.</p>
+      <p>Lara bugün hayatta ve denizde istediği gibi yüzüyor, ama yavruları onun kadar şanslı olacak mı? Kumsallardaki ışık ve kıyı kirliliği yolculuğunu tehdit ediyor. Lara çok üzgün. Lara çocuklarıyla yüzmek istiyor. </p>
       <button id="closeModal">Haritaya Dön</button>
     </div>
   </div>
@@ -197,7 +197,7 @@
 
           fullPath = densifyPath(convertedPath, 10); 
 
-          sourceText.textContent = "GPS Verisi Aktif • Sinematik Mod";
+          sourceText.textContent = "Lara'yı takip ediyorsunuz";
           storyText.textContent = "Lara Akdeniz'de dolaşıyor...";
 
           scrub.max = fullPath.length;
@@ -270,9 +270,9 @@
         } else if (ratio < 0.85) {
           storyText.textContent = "Güvenli yuvalama alanlarına doğru süzülüyor...";
         } else if (ratio < 1) {
-          storyText.textContent = "Rotanın sonuna yaklaşılıyor...";
+          storyText.textContent = "Lara evden çok uzaklaştın...";
         } else {
-          storyText.textContent = "Lara güvenli noktaya ulaştı. 🌿";
+          storyText.textContent = "Lara en son burdaydı. 🌿";
           endModalOverlay.style.display = "flex";
         }
       }
