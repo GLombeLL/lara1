@@ -51,7 +51,7 @@
   <script>
     require([
       "esri/WebMap",
-      "esri/views/SceneView",
+      "esri/views/MapViewer",
       "esri/layers/GraphicsLayer",
       "esri/Graphic",
       "esri/geometry/Polyline"
@@ -61,7 +61,7 @@
       // AYARLAR — buradan uyarlayın
       // =====================================================================
       const SCENE_PORTAL_ITEM_ID = "607a12960a1e43b3b00446344406380c"; // sahneniz
-      const ROUTE_LAYER_TITLE_HINT = "lara_polylines1";  // katman adı (küçük harf, kısmi eşleşme yeterli)
+      const ROUTE_LAYER_TITLE_HINT = "Lara_Polylines1";  // katman adı (küçük harf, kısmi eşleşme yeterli)
       const STEP_MS = 120;           // otomatik oynatmada nokta başına süre (ms) — hızı buradan ayarlayın
       const FOLLOW_TILT = 65;
       const FOLLOW_SCALE = 6000;     // kamera takip ederken ne kadar yakın dursun
@@ -70,7 +70,7 @@
       // =====================================================================
 
       const scene = new WebMap({ portalItem: { id: SCENE_PORTAL_ITEM_ID } });
-      const view = new SceneView({ container: "viewDiv", map: scene });
+      const view = new MapViewer({ container: "viewDiv", map: scene });
 
       const animLayer = new GraphicsLayer({ elevationInfo: { mode: "relative-to-ground", offset: 5 } });
       scene.add(animLayer);
